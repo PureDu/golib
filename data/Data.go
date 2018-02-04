@@ -3,8 +3,59 @@ package data
 import (
 	"unsafe"
 
+	"github.com/PureDu/golib/math"
 	"github.com/PureDu/golib/util"
 )
+
+type Dataer interface {
+	CopyFrom(src Dataer)
+	Clone() Dataer
+	GetType() DATATYPE
+
+	SetDefaultValue(t DATATYPE)
+
+	IsNullValue() bool
+
+	GetBool() bool
+
+	GetInt() int
+
+	GetInt32() int32
+
+	GetInt64() int64
+
+	GetFloat32() float32
+
+	GetFloat64() float64
+
+	GetString() string
+
+	GetObject() GUID
+
+	GetPointer() unsafe.Pointer
+
+	SetUnknown()
+
+	SetBool(value bool)
+
+	SetInt(value int)
+
+	SetInt32(value int32)
+
+	SetInt64(value int64)
+
+	SetFloat32(value float32)
+
+	SetFloat64(value float64)
+
+	SetString(value string)
+
+	SetObject(value GUID)
+
+	SetPointer(value unsafe.Pointer)
+}
+
+var _ Dataer = &data{}
 
 type DATATYPE int32
 
@@ -31,6 +82,23 @@ const (
 	DTMAX
 )
 
+var dataTytpNameMap = map[DATATYPE]string{
+	DTUNKNOWN: "DTUNKNOWN",
+	DTBOOLEAN: "DTBOOLEAN",
+	DTINT:     "DTINT",
+	DTINT32:   "DTINT32",
+	DTINT64:   "DTINT64",
+	DTFLOAT32: "DTFLOAT32",
+	DTFLOAT64: "DTFLOAT64",
+	DTSTRING:  "DTSTRING",
+	DTOBJECT:  "DTOBJECT",
+	DTPOINTER: "DTPOINTER",
+}
+
+func (dt DATATYPE) String() string {
+	return dataTytpNameMap[dt]
+}
+
 const (
 	NULLBOOLEAN bool    = false
 	NULLINT     int     = 0
@@ -41,26 +109,55 @@ const (
 	NULLSTRING  string  = ""
 )
 
-var NULLGUID GUID = GUID{0, 0}
+var NULLGUID GUID = NewGUID(0, 0)
 
-type Data struct {
+type data struct {
 	dataType DATATYPE
 	pointer  unsafe.Pointer
 	buffer   [2]uint64
 }
 
-func (self *Data) reset(t DATATYPE) {
+func NewData() Dataer {
+	return newData()
+}
+
+func newData() *data {
+	d := &data{}
+	d.reset(DTUNKNOWN)
+	return d
+}
+func (self *data) reset(t DATATYPE) {
 	self.buffer[0] = 0
 	self.buffer[1] = 0
 	self.pointer = (unsafe.Pointer)(&self.buffer)
 	self.dataType = t
 }
 
-func (self *Data) GetType() DATATYPE {
+func (self *data) CopyFrom(src Dataer) {
+	srcData := src.(*data)
+	self.copyFrom(srcData)
+}
+
+func (self *data) copyFrom(src *data) {
+	self.dataType = src.dataType
+	self.buffer = src.buffer
+
+	if self.dataType == DTSTRING ||
+		self.dataType == DTPOINTER {
+		self.pointer = src.pointer
+	}
+}
+
+func (self *data) Clone() Dataer {
+	cloneData := newData()
+	cloneData.copyFrom(self)
+	return cloneData
+}
+func (self *data) GetType() DATATYPE {
 	return self.dataType
 }
 
-func (self *Data) SetDefaultValue(t DATATYPE) {
+func (self *data) SetDefaultValue(t DATATYPE) {
 	switch t {
 	case DTBOOLEAN:
 		self.SetBool(NULLBOOLEAN)
@@ -78,12 +175,14 @@ func (self *Data) SetDefaultValue(t DATATYPE) {
 		self.SetString(NULLSTRING)
 	case DTOBJECT:
 		self.SetObject(NULLGUID)
+	case DTPOINTER:
+		self.SetPointer(nil)
 	default:
 		util.Assert(false, "don't have data type")
 	}
 }
 
-func (self *Data) IsNullValue() bool {
+func (self *data) IsNullValue() bool {
 
 	switch self.GetType() {
 	case DTBOOLEAN:
@@ -91,112 +190,142 @@ func (self *Data) IsNullValue() bool {
 	case DTINT:
 		return self.GetInt() == NULLINT
 	case DTINT32:
-		   return self.GetInt32() == NULLINT32
+		return self.GetInt32() == NULLINT32
 	case DTINT64:
-		 return self.GetInt64() == NULLINT64
+		return self.GetInt64() == NULLINT64
 	case DTFLOAT32:
-		 return self.GetFloat32() == 
+		return math.IsZeroFloat32(self.GetFloat32())
 	case DTFLOAT64:
+		return math.IsZeroFloat64(self.GetFloat64())
 	case DTSTRING:
-		self.SetString(NULLSTRING)
+		return self.GetString() == NULLSTRING
 	case DTOBJECT:
-		self.SetObject(NULLGUID)
-	default:
-		util.Assert(false, "don't have data type")
+		return self.GetObject() == NULLGUID
+	case DTPOINTER:
+		return self.GetPointer() == nil
 	}
+	return false
 }
 
-func (self *Data) GetBool() bool {
-	util.Assert(self.dataType == DTBOOLEAN, "self.dataType == DT_BOOLEAN")
+func (self *data) GetBool() bool {
+	if !util.Assert(self.dataType == DTBOOLEAN,
+		"self.dataType == DT_BOOLEAN") {
+		return NULLBOOLEAN
+	}
 	return *(*bool)(self.pointer)
 }
 
-func (self *Data) GetInt() int {
-	util.Assert(self.dataType == DTINT, "self.dataType == DT_INT")
+func (self *data) GetInt() int {
+	if !util.Assert(self.dataType == DTINT,
+		"self.dataType == DT_INT") {
+		return NULLINT
+	}
 	return *(*int)(self.pointer)
 }
 
-func (self *Data) GetInt32() int32 {
-	util.Assert(self.dataType == DTINT32, "self.dataType == DTINT32")
+func (self *data) GetInt32() int32 {
+	if !util.Assert(self.dataType == DTINT32,
+		"self.dataType == DTINT32") {
+		return NULLINT32
+	}
 	return *(*int32)(self.pointer)
 }
 
-func (self *Data) GetInt64() int64 {
-	util.Assert(self.dataType == DTINT64, "self.dataType == DTINT64")
+func (self *data) GetInt64() int64 {
+	if !util.Assert(self.dataType == DTINT64,
+		"self.dataType == DTINT64") {
+		return NULLINT64
+	}
 	return *(*int64)(self.pointer)
 }
 
-func (self *Data) GetFloat32() float32 {
-	util.Assert(self.dataType == DTFLOAT32, "self.dataType == DT_FLOAT32")
+func (self *data) GetFloat32() float32 {
+	if !util.Assert(self.dataType == DTFLOAT32,
+		"self.dataType == DT_FLOAT32") {
+		return NULLFLOAT32
+	}
 	return *(*float32)(self.pointer)
 }
 
-func (self *Data) GetFloat64() float64 {
-	util.Assert(self.dataType == DTFLOAT64, "self.dataType == DT_FLOAT64")
+func (self *data) GetFloat64() float64 {
+	if !util.Assert(self.dataType == DTFLOAT64,
+		"self.dataType == DT_FLOAT64") {
+		return NULLFLOAT64
+	}
 	return *(*float64)(self.pointer)
 }
 
-func (self *Data) GetString() *string {
-	util.Assert(self.dataType == DTSTRING, "self.dataType == DT_STRING")
-	return (*string)(self.pointer)
+func (self *data) GetString() string {
+	if !util.Assert(self.dataType == DTSTRING,
+		"self.dataType == DT_STRING") {
+
+		return NULLSTRING
+	}
+	return *(*string)(self.pointer)
 }
 
-func (self *Data) GetObject() GUID {
-	util.Assert(self.dataType == DTOBJECT, "self.dataType == DT_OBJECT")
-	return GUID{LOW: self.buffer[0], High: self.buffer[1]}
+func (self *data) GetObject() GUID {
+	if !util.Assert(self.dataType == DTOBJECT,
+		"self.dataType == DT_OBJECT") {
+		return NULLGUID
+	}
+	return NewGUID(self.buffer[0], self.buffer[1])
 }
 
-func (self *Data) GetPointer() unsafe.Pointer {
-	util.Assert(self.dataType == DTPOINTER, "self.dataType == DT_POINTER")
+func (self *data) GetPointer() unsafe.Pointer {
+	if !util.Assert(self.dataType == DTPOINTER,
+		"self.dataType == DT_POINTER") {
+		return nil
+	}
 	return self.pointer
 }
 
-func (self *Data) SetUnknown() {
+func (self *data) SetUnknown() {
 	self.reset(DTUNKNOWN)
 }
 
-func (self *Data) SetBool(value bool) {
+func (self *data) SetBool(value bool) {
 	self.reset(DTBOOLEAN)
 	*(*bool)(self.pointer) = value
 }
 
-func (self *Data) SetInt(value int) {
+func (self *data) SetInt(value int) {
 	self.reset(DTINT)
 	*(*int)(self.pointer) = value
 }
 
-func (self *Data) SetInt32(value int32) {
+func (self *data) SetInt32(value int32) {
 	self.reset(DTINT32)
 	*(*int32)(self.pointer) = value
 }
 
-func (self *Data) SetInt64(value int64) {
+func (self *data) SetInt64(value int64) {
 	self.reset(DTINT64)
 	*(*int64)(self.pointer) = value
 }
 
-func (self *Data) SetFloat32(value float32) {
+func (self *data) SetFloat32(value float32) {
 	self.reset(DTFLOAT32)
 	*(*float32)(self.pointer) = value
 }
 
-func (self *Data) SetFloat64(value float64) {
+func (self *data) SetFloat64(value float64) {
 	self.reset(DTFLOAT64)
 	*(*float64)(self.pointer) = value
 }
 
-func (self *Data) SetString(value string) {
+func (self *data) SetString(value string) {
 	self.reset(DTSTRING)
 	self.pointer = unsafe.Pointer(&value)
 }
 
-func (self *Data) SetObject(value GUID) {
+func (self *data) SetObject(value GUID) {
 	self.reset(DTOBJECT)
-	self.buffer[0] = value.LOW
-	self.buffer[1] = value.High
+	self.buffer[0] = value.high
+	self.buffer[1] = value.low
 }
 
-func (self *Data) SetPointer(value unsafe.Pointer) {
+func (self *data) SetPointer(value unsafe.Pointer) {
 	self.reset(DTPOINTER)
 	self.pointer = value
 }
