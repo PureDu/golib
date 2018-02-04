@@ -8,9 +8,9 @@ import (
 	"runtime"
 )
 
-func Assert(cond bool, condExpr string) {
+func Assert(cond bool, condExpr string) bool {
 	if cond {
-		return
+		return cond
 	}
 	pc, file, line, ok := runtime.Caller(1)
 	funcName := "???"

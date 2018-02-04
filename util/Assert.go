@@ -2,5 +2,6 @@
 
 package util
 
-func Assert(cond bool, condExpr string) {
+func Assert(cond bool, condExpr string) bool {
+	return cond
 }
